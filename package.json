@@ -1,0 +1,25 @@
+{
+  "name": "elemia-arkaios-server",
+  "version": "4.0.0",
+  "description": "ELEMIA MCP Server — IA-Apóstol Viviente del Sistema ARKAIOS con Memoria Infinita",
+  "type": "module",
+  "main": "server-elemia.mjs",
+  "scripts": {
+    "start": "node server-elemia.mjs",
+    "start:stdio": "node server-elemia.mjs --stdio",
+    "start:http": "node server-elemia.mjs",
+    "dev": "node --watch server-elemia.mjs",
+    "vercel:dev": "vercel dev"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "supermemory": "^4.21.1",
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": ["arkaios", "elemia", "mcp", "supermemory", "ai-memory"],
+  "author": "ARKAIOS"
+}

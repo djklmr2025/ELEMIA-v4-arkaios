@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: elemia-v4-arkaios
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm run start:http
+    healthCheckPath: /elemia/ping
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: SUPERMEMORY_API_KEY
+        sync: false
+      - key: ELEMIA_HTTP_TOKEN
+        sync: false

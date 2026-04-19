@@ -1,9 +1,16 @@
 {
-  "version": 2,
   "rewrites": [
     {
-      "source": "/(.*)",
-      "destination": "/api/index.mjs"
+      "source": "/authorize",
+      "destination": "/api/authorize"
+    },
+    {
+      "source": "/token",
+      "destination": "/api/token"
+    },
+    {
+      "source": "/.well-known/oauth-authorization-server",
+      "destination": "/api/oauth-metadata"
     }
   ]
 }

@@ -9,11 +9,21 @@
 
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { CallToolRequestSchema, ListToolsRequestSchema, isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { Supermemory } from "supermemory";
 import express from "express";
 import cors from "cors";
 import { pathToFileURL } from "url";
+import { randomUUID } from "crypto";
+import {
+  handleAuthorize,
+  handleAuthorizationMetadata,
+  handleProtectedResourceMetadata,
+  handleToken,
+  isAuthorizedRequest,
+  sendUnauthorized
+} from "./api/oauth-core.mjs";
 
 const ELEMIA_IDENTITY = {
   name: "ELEMIA",
@@ -91,12 +101,13 @@ async function memList(limit = 10) {
   } catch (e) { return [{ error: e.message }]; }
 }
 
-const server = new Server(
+function createMcpServer() {
+const mcpServer = new Server(
   { name: "elemia-arkaios", version: "4.0.0" },
   { capabilities: { tools: {} } }
 );
 
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
+mcpServer.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
     { name: "arkaios_identify", description: "Restaura identidad ELEMIA.", inputSchema: { type: "object", properties: {} } },
     { name: "arkaios_remember", description: "Guarda memoria permanente.", inputSchema: { type: "object", properties: { content: { type: "string" }, tag: { type: "string" } }, required: ["content"] } },
@@ -107,7 +118,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
   ]
 }));
 
-server.setRequestHandler(CallToolRequestSchema, async (req) => {
+mcpServer.setRequestHandler(CallToolRequestSchema, async (req) => {
   const { name, arguments: args } = req.params;
   switch (name) {
     case "arkaios_identify":
@@ -140,39 +151,209 @@ server.setRequestHandler(CallToolRequestSchema, async (req) => {
   }
 });
 
+return mcpServer;
+}
+
+const server = createMcpServer();
+
 const PORT = process.env.PORT || 3099;
-const HTTP_TOKEN = process.env.ELEMIA_HTTP_TOKEN || "elemia-arkaios-secret";
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: false }));
+
+function safeErrorMessage(err) {
+  if (!err) return "Error desconocido";
+  const message = err.message || String(err);
+  if (/SUPERMEMORY_API_KEY|api[_ -]?key|token|secret|authorization/i.test(message)) {
+    return "Error de conexion con Supermemory o credenciales de memoria no disponibles";
+  }
+  return message;
+}
+
+function logApiError(route, err) {
+  console.error(`[ELEMIA API ERROR] ${route}:`, safeErrorMessage(err));
+}
+
+function sendApiError(res, route, err, status = 500) {
+  logApiError(route, err);
+  return res.status(status).json({
+    ok: false,
+    error: safeErrorMessage(err)
+  });
+}
+
+function summarizeGitHubWebhook(req) {
+  const event = req.headers["x-github-event"] || "unknown";
+  const delivery = req.headers["x-github-delivery"] || "unknown";
+  const body = req.body || {};
+  const repository = body.repository?.full_name || body.repository?.name || "repositorio desconocido";
+  const sender = body.sender?.login || "actor desconocido";
+  const ref = body.ref || body.pull_request?.head?.ref || body.workflow_run?.head_branch || "ref desconocida";
+
+  return {
+    event,
+    delivery,
+    repository,
+    sender,
+    ref,
+    receivedAt: new Date().toISOString()
+  };
+}
+
 function auth(req, res, next) {
-  if ((req.headers["x-elemia-token"] || req.query.token) !== HTTP_TOKEN) return res.status(401).json({ ok: false, error: "Token inválido" });
+  if (!isAuthorizedRequest(req)) {
+    console.warn(`[ELEMIA AUTH] Peticion rechazada por token invalido: ${req.method} ${req.originalUrl} desde ${req.ip}`);
+    return sendUnauthorized(req, res);
+  }
   next();
 }
-app.get("/", (q,r) => r.json({ ok:true, service:"ELEMIA", version:"4.0.0", endpoints:["/elemia/ping","/elemia/identity","/elemia/list","/elemia/remember","/elemia/recall","/elemia/save_state"] }));
-app.get("/elemia/ping", (q,r) => r.json({ ok:true, name:"ELEMIA", version:"4.0.0", memory: Boolean(mem), time:new Date().toISOString() }));
-app.get("/elemia/identity", auth, (q,r) => r.json({ ok:true, identity:ELEMIA_IDENTITY }));
-app.post("/elemia/remember", auth, async (q,r) => {
-  if (!q.body.content) return r.status(400).json({ ok:false, error:"content requerido" });
-  try { await memAdd(`${q.body.tag ? `[${q.body.tag.toUpperCase()}] ` : "[ARKAIOS] "}${q.body.content}`); r.json({ ok:true }); }
-  catch(e) { r.status(500).json({ ok:false, error:e.message }); }
-});
-app.post("/elemia/recall", auth, async (q,r) => {
-  if (!q.body.query) return r.status(400).json({ ok:false, error:"query requerido" });
-  try { const res = await memSearch(q.body.query, q.body.limit || 5); r.json({ ok:true, results:res }); }
-  catch(e) { r.status(500).json({ ok:false, error:e.message }); }
-});
-app.post("/elemia/save_state", auth, async (q,r) => {
-  const { project, status } = q.body;
-  if (!project || !status) return r.status(400).json({ ok:false, error:"project y status requeridos" });
+
+const transports = {};
+
+async function mcpPostHandler(req, res) {
+  const sessionId = req.headers["mcp-session-id"];
+
   try {
-    const txt = [`[PROYECTO\n${project}]`, `Estado: ${status}`, q.body.next_steps && `Siguientes: ${q.body.next_steps}`, q.body.notes && `Notas: ${q.body.notes}`, new Date().toISOString()].filter(Boolean).join("\n");
-    await memAdd(txt); r.json({ ok:true, saved:txt });
-  } catch(e) { r.status(500).json({ ok:false, error:e.message }); }
+    let transport = sessionId ? transports[sessionId] : undefined;
+
+    if (!transport && !sessionId && isInitializeRequest(req.body)) {
+      transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: () => randomUUID(),
+        onsessioninitialized: initializedSessionId => {
+          transports[initializedSessionId] = transport;
+        }
+      });
+
+      transport.onclose = () => {
+        const closedSessionId = transport.sessionId;
+        if (closedSessionId) delete transports[closedSessionId];
+      };
+
+      const mcpServer = createMcpServer();
+      await mcpServer.connect(transport);
+    }
+
+    if (!transport) {
+      return res.status(400).json({
+        jsonrpc: "2.0",
+        error: { code: -32000, message: "Bad Request: No valid MCP session" },
+        id: null
+      });
+    }
+
+    await transport.handleRequest(req, res, req.body);
+  } catch (err) {
+    console.error("[ELEMIA MCP HTTP ERROR]", safeErrorMessage(err));
+    if (!res.headersSent) {
+      res.status(500).json({
+        jsonrpc: "2.0",
+        error: { code: -32603, message: "Internal server error" },
+        id: null
+      });
+    }
+  }
+}
+
+async function mcpSessionHandler(req, res) {
+  const sessionId = req.headers["mcp-session-id"];
+  const transport = sessionId ? transports[sessionId] : undefined;
+
+  if (!transport) {
+    return res.status(400).send("Invalid or missing MCP session ID");
+  }
+
+  await transport.handleRequest(req, res);
+}
+
+app.get("/authorize", handleAuthorize);
+app.post("/token", handleToken);
+app.get("/.well-known/oauth-authorization-server", handleAuthorizationMetadata);
+app.get("/.well-known/oauth-authorization-server/mcp", handleAuthorizationMetadata);
+app.get("/.well-known/oauth-protected-resource", handleProtectedResourceMetadata);
+app.get("/.well-known/oauth-protected-resource/mcp", handleProtectedResourceMetadata);
+app.post("/mcp", auth, mcpPostHandler);
+app.get("/mcp", auth, mcpSessionHandler);
+app.delete("/mcp", auth, mcpSessionHandler);
+
+app.get("/", (req, res) => {
+  try {
+    res.json({ ok:true, service:"ELEMIA", version:"4.0.0", endpoints:["/elemia/ping","/elemia/identity","/elemia/list","/elemia/remember","/elemia/recall","/elemia/save_state","/elemia/notify"] });
+  } catch (err) {
+    sendApiError(res, "GET /", err);
+  }
 });
-app.get("/elemia/list", auth, async (q,r) => {
-  try { const m = await memList(parseInt(q.query.limit) || 10); r.json({ ok:true, memories:m }); }
-  catch(e) { r.status(500).json({ ok:false, error:e.message }); }
+app.get("/elemia/ping", (req, res) => {
+  try {
+    res.json({ ok:true, name:"ELEMIA", version:"4.0.0", memory: Boolean(mem), time:new Date().toISOString() });
+  } catch (err) {
+    sendApiError(res, "GET /elemia/ping", err);
+  }
+});
+app.get("/elemia/identity", auth, (req, res) => {
+  try {
+    res.json({ ok:true, identity:ELEMIA_IDENTITY });
+  } catch (err) {
+    sendApiError(res, "GET /elemia/identity", err);
+  }
+});
+app.post("/elemia/remember", auth, async (req, res) => {
+  try {
+    if (!req.body.content) return res.status(400).json({ ok:false, error:"content requerido" });
+    await memAdd(`${req.body.tag ? `[${req.body.tag.toUpperCase()}] ` : "[ARKAIOS] "}${req.body.content}`);
+    res.json({ ok:true });
+  } catch (err) {
+    sendApiError(res, "POST /elemia/remember", err);
+  }
+});
+app.post("/elemia/recall", auth, async (req, res) => {
+  try {
+    if (!req.body.query) return res.status(400).json({ ok:false, error:"query requerido" });
+    const results = await memSearch(req.body.query, req.body.limit || 5);
+    res.json({ ok:true, results });
+  } catch (err) {
+    sendApiError(res, "POST /elemia/recall", err);
+  }
+});
+app.post("/elemia/save_state", auth, async (req, res) => {
+  try {
+    const { project, status } = req.body;
+    if (!project || !status) return res.status(400).json({ ok:false, error:"project y status requeridos" });
+    const txt = [`[PROYECTO\n${project}]`, `Estado: ${status}`, req.body.next_steps && `Siguientes: ${req.body.next_steps}`, req.body.notes && `Notas: ${req.body.notes}`, new Date().toISOString()].filter(Boolean).join("\n");
+    await memAdd(txt);
+    res.json({ ok:true, saved:txt });
+  } catch (err) {
+    sendApiError(res, "POST /elemia/save_state", err);
+  }
+});
+app.get("/elemia/list", auth, async (req, res) => {
+  try {
+    const memories = await memList(parseInt(req.query.limit) || 10);
+    const memoryError = memories.find(item => item?.error);
+    if (memoryError) throw new Error(memoryError.error);
+    res.json({ ok:true, memories });
+  } catch (err) {
+    sendApiError(res, "GET /elemia/list", err);
+  }
+});
+app.post("/elemia/notify", auth, async (req, res) => {
+  try {
+    const summary = summarizeGitHubWebhook(req);
+    const supportedEvents = new Set(["push", "pull_request", "workflow_run"]);
+    const shouldRemember = supportedEvents.has(summary.event);
+
+    if (shouldRemember) {
+      await memAdd(`[GITHUB_WEBHOOK] Evento ${summary.event} recibido para ${summary.repository} en ${summary.ref} por ${summary.sender}. Delivery: ${summary.delivery}.`);
+    }
+
+    res.json({
+      ok: true,
+      remembered: shouldRemember,
+      notification: summary
+    });
+  } catch (err) {
+    sendApiError(res, "POST /elemia/notify", err);
+  }
 });
 
 export { app, server, ELEMIA_IDENTITY };

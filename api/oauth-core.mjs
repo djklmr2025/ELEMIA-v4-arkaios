@@ -8,10 +8,6 @@ export function getHttpToken() {
   return process.env.ELEMIA_HTTP_TOKEN || "elemia-arkaios-secret";
 }
 
-function getClientId() {
-  return process.env.ELEMIA_OAUTH_CLIENT_ID || DEFAULT_CLIENT_ID;
-}
-
 function getBaseUrl(req) {
   const configuredUrl = process.env.ELEMIA_PUBLIC_URL || process.env.PUBLIC_URL;
   if (configuredUrl) return configuredUrl.replace(/\/$/, "");
@@ -119,7 +115,7 @@ export function isAuthorizedRequest(req) {
 
 export function sendUnauthorized(req, res) {
   const baseUrl = getBaseUrl(req);
-  res.setHeader("WWW-Authenticate", `Bearer resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"`);
+  res.setHeader("WWW-Authenticate", `Bearer resource_metadata="${baseUrl}/.well-known/oauth-protected-resource/mcp"`);
   return json(res, 401, { ok: false, error: "Token invalido" });
 }
 
@@ -174,7 +170,7 @@ export function handleAuthorize(req, res) {
     return redirect(res, errorRedirect(redirectUri, state, "unsupported_response_type", "Solo response_type=code esta soportado"));
   }
 
-  if (clientId !== getClientId()) {
+  if (process.env.ELEMIA_OAUTH_CLIENT_ID && clientId !== process.env.ELEMIA_OAUTH_CLIENT_ID) {
     return redirect(res, errorRedirect(redirectUri, state, "invalid_client", "client_id no reconocido"));
   }
 
@@ -183,7 +179,7 @@ export function handleAuthorize(req, res) {
   }
 
   const code = createAuthorizationCode({
-    clientId,
+    clientId: clientId || DEFAULT_CLIENT_ID,
     redirectUri,
     codeChallenge,
     codeChallengeMethod

@@ -12,14 +12,21 @@
     "vercel:dev": "vercel dev"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0",
-    "supermemory": "^4.21.1",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "cors": "^2.8.5",
     "express": "^4.18.2",
-    "cors": "^2.8.5"
+    "supermemory": "^4.21.1",
+    "zod": "^4.4.0"
   },
   "engines": {
     "node": ">=18.0.0"
   },
-  "keywords": ["arkaios", "elemia", "mcp", "supermemory", "ai-memory"],
+  "keywords": [
+    "arkaios",
+    "elemia",
+    "mcp",
+    "supermemory",
+    "ai-memory"
+  ],
   "author": "ARKAIOS"
 }

@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "elemia": {
+      "command": "node",
+      "args": [
+        "C:\\Users\\djklm\\Mi unidad\\Gemini Gems\\ELEMIA-v4\\server-elemia.mjs",
+        "--stdio"
+      ],
+      "env": {
+        "SUPERMEMORY_API_KEY": "PON_AQUI_TU_SUPERMEMORY_API_KEY",
+        "ELEMIA_HTTP_TOKEN": "elemia-arkaios-v4"
+      }
+    }
+  }
+}

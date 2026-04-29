@@ -1,0 +1,8 @@
+{
+  "servers": {
+    "arkaios-mcp": {
+      "type": "http",
+      "serverUrl": "https://elemia-v4-arkaios.onrender.com/mcp"
+    }
+  }
+}

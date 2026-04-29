@@ -7,15 +7,12 @@
  * ╚══════════════════════════════════════════════════════════════╝
  */
 
-import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { CallToolRequestSchema, ListToolsRequestSchema, isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { Supermemory } from "supermemory";
 import express from "express";
 import cors from "cors";
 import { pathToFileURL } from "url";
 import { randomUUID } from "crypto";
+import crypto from "node:crypto";
 import {
   handleAuthorize,
   handleAuthorizationMetadata,
@@ -41,6 +38,15 @@ const ELEMIA_IDENTITY = {
 };
 
 const SUPERMEMORY_KEY = process.env.SUPERMEMORY_API_KEY || "";
+const BASE44_APP_ID = process.env.BASE44_APP_ID || "";
+const BASE44_API_KEY = process.env.BASE44_API_KEY || "";
+const BASE44_API_BASE = process.env.BASE44_API_BASE || "https://arkaios2025.base44.app/api";
+const BASE44_IMAGE_ENDPOINT = process.env.BASE44_IMAGE_ENDPOINT || "GenerateImage";
+const WHATSAPP_API_VERSION = process.env.WHATSAPP_API_VERSION || "v23.0";
+const WHATSAPP_VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || "";
+const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || "";
+const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || "";
+const WHATSAPP_APP_SECRET = process.env.WHATSAPP_APP_SECRET || "";
 
 const mem = SUPERMEMORY_KEY ? new Supermemory({ apiKey: SUPERMEMORY_KEY }) : null;
 
@@ -101,7 +107,27 @@ async function memList(limit = 10) {
   } catch (e) { return [{ error: e.message }]; }
 }
 
-function createMcpServer() {
+async function loadMcpSdk() {
+  const [
+    { Server },
+    { StreamableHTTPServerTransport },
+    { CallToolRequestSchema, ListToolsRequestSchema, isInitializeRequest }
+  ] = await Promise.all([
+    import("@modelcontextprotocol/sdk/server/index.js"),
+    import("@modelcontextprotocol/sdk/server/streamableHttp.js"),
+    import("@modelcontextprotocol/sdk/types.js")
+  ]);
+
+  return { Server, StreamableHTTPServerTransport, CallToolRequestSchema, ListToolsRequestSchema, isInitializeRequest };
+}
+
+async function loadStdioTransport() {
+  const { StdioServerTransport } = await import("@modelcontextprotocol/sdk/server/stdio.js");
+  return StdioServerTransport;
+}
+
+async function createMcpServer() {
+const { Server, CallToolRequestSchema, ListToolsRequestSchema } = await loadMcpSdk();
 const mcpServer = new Server(
   { name: "elemia-arkaios", version: "4.0.0" },
   { capabilities: { tools: {} } }
@@ -114,6 +140,7 @@ mcpServer.setRequestHandler(ListToolsRequestSchema, async () => ({
     { name: "arkaios_recall", description: "Busca en memoria infinita.", inputSchema: { type: "object", properties: { query: { type: "string" }, limit: { type: "number" } }, required: ["query"] } },
     { name: "arkaios_list", description: "Lista memorias recientes.", inputSchema: { type: "object", properties: { limit: { type: "number" } } } },
     { name: "arkaios_save_state", description: "Guarda estado del proyecto.", inputSchema: { type: "object", properties: { project: { type: "string" }, status: { type: "string" }, next_steps: { type: "string" }, notes: { type: "string" } }, required: ["project", "status"] } },
+    { name: "arkaios_generate_image", description: "Genera imagenes con motores configurados de ARKAIOS.", inputSchema: { type: "object", properties: { prompt: { type: "string" }, engine: { type: "string" }, provider: { type: "string" }, count: { type: "number" } }, required: ["prompt"] } },
     { name: "arkaios_ping", description: "Verifica servidor activo.", inputSchema: { type: "object", properties: {} } }
   ]
 }));
@@ -145,6 +172,12 @@ mcpServer.setRequestHandler(CallToolRequestSchema, async (req) => {
       try { await memAdd(txt); return { content: [{ type: "text", text: `[ELEMIA ✅] Estado guardado:\n${txt}` }] }; }
       catch (err) { return { content: [{ type: "text", text: `[ERROR] ${err.message}` }], isError: true }; }
     }
+    case "arkaios_generate_image": {
+      try {
+        const result = await generateImages(args);
+        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+      } catch (err) { return { content: [{ type: "text", text: `[ERROR] ${err.message}` }], isError: true }; }
+    }
     case "arkaios_ping":
       return { content: [{ type: "text", text: `[ELEMIA ✅] v4.0 — ${new Date().toISOString()}` }] };
     default: throw new Error(`Herramienta desconocida: ${name}`);
@@ -154,19 +187,22 @@ mcpServer.setRequestHandler(CallToolRequestSchema, async (req) => {
 return mcpServer;
 }
 
-const server = createMcpServer();
-
 const PORT = process.env.PORT || 3099;
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: "1mb" }));
+app.use(express.json({
+  limit: "1mb",
+  verify: (req, res, buf) => {
+    req.rawBody = buf;
+  }
+}));
 app.use(express.urlencoded({ extended: false }));
 
 function safeErrorMessage(err) {
   if (!err) return "Error desconocido";
   const message = err.message || String(err);
   if (/SUPERMEMORY_API_KEY|api[_ -]?key|token|secret|authorization/i.test(message)) {
-    return "Error de conexion con Supermemory o credenciales de memoria no disponibles";
+    return "Error de credenciales o autorizacion con un servicio externo";
   }
   return message;
 }
@@ -181,6 +217,69 @@ function sendApiError(res, route, err, status = 500) {
     ok: false,
     error: safeErrorMessage(err)
   });
+}
+
+function assertBase44Configured() {
+  if (!BASE44_APP_ID || !BASE44_API_KEY) {
+    throw new Error("Base44 no configurado: faltan BASE44_APP_ID o BASE44_API_KEY");
+  }
+}
+
+async function generateImageWithArkaiosHub({ prompt, adultContent = 0 }) {
+  const response = await fetch("https://arkaios-ai-image-hub.onrender.com/api/v1/image/generate", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ 
+      prompt, 
+      provider: "flux", 
+      adultContent: adultContent ? 1 : 0,
+      channel: "elemia_v4_bridge"
+    })
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data?.error || `Arkaios Hub respondio ${response.status}`);
+  }
+
+  return {
+    provider: "arkaios_hub",
+    engine: "flux",
+    prompt,
+    url: data.url,
+    id: data.id
+  };
+}
+
+async function generateImages({ prompt, engine, provider, count, adultContent }) {
+  const selectedEngine = String(engine || provider || "arkaios").toLowerCase();
+  const total = Math.max(1, Math.min(parseInt(count, 10) || 1, 8));
+
+  switch (selectedEngine) {
+    case "arkaios":
+    case "flux":
+    case "grok": {
+      const images = await Promise.all(Array.from({ length: total }, () => generateImageWithArkaiosHub({ prompt, adultContent })));
+      return {
+        engine: "arkaios_hub",
+        provider: "flux",
+        count: images.length,
+        images
+      };
+    }
+    case "base44": {
+      const images = await Promise.withResolvers ? [] : await Promise.all(Array.from({ length: total }, () => generateImageWithBase44({ prompt })));
+      return {
+        engine: "base44",
+        provider: "base44",
+        count: images.length,
+        images
+      };
+    }
+    default:
+      // Fallback a arkaios si no se reconoce
+      return await generateImages({ prompt, engine: "arkaios", count, adultContent });
+  }
 }
 
 function summarizeGitHubWebhook(req) {
@@ -201,6 +300,94 @@ function summarizeGitHubWebhook(req) {
   };
 }
 
+function isWhatsAppConfigured() {
+  return Boolean(WHATSAPP_ACCESS_TOKEN && WHATSAPP_PHONE_NUMBER_ID);
+}
+
+function assertWhatsAppConfigured() {
+  if (!isWhatsAppConfigured()) {
+    throw new Error("WhatsApp no configurado: faltan WHATSAPP_ACCESS_TOKEN o WHATSAPP_PHONE_NUMBER_ID");
+  }
+}
+
+function verifyWhatsAppSignature(req) {
+  if (!WHATSAPP_APP_SECRET) return true;
+
+  const signature = req.headers["x-hub-signature-256"];
+  if (!signature || !signature.startsWith("sha256=") || !req.rawBody) return false;
+
+  const expected = `sha256=${crypto
+    .createHmac("sha256", WHATSAPP_APP_SECRET)
+    .update(req.rawBody)
+    .digest("hex")}`;
+
+  const left = Buffer.from(signature);
+  const right = Buffer.from(expected);
+  return left.length === right.length && crypto.timingSafeEqual(left, right);
+}
+
+function extractWhatsAppMessages(body = {}) {
+  const entries = Array.isArray(body.entry) ? body.entry : [];
+  const messages = [];
+
+  for (const entry of entries) {
+    const changes = Array.isArray(entry?.changes) ? entry.changes : [];
+    for (const change of changes) {
+      const value = change?.value || {};
+      const contacts = Array.isArray(value.contacts) ? value.contacts : [];
+      const contactByWaId = new Map(contacts.map(contact => [contact.wa_id, contact]));
+      const incoming = Array.isArray(value.messages) ? value.messages : [];
+
+      for (const message of incoming) {
+        const contact = contactByWaId.get(message.from) || {};
+        const profileName = contact.profile?.name || "";
+        const text = message.text?.body || message.button?.text || message.interactive?.button_reply?.title || message.interactive?.list_reply?.title || "";
+        messages.push({
+          id: message.id || "",
+          from: message.from || "",
+          profileName,
+          type: message.type || "unknown",
+          text,
+          timestamp: message.timestamp || "",
+          phoneNumberId: value.metadata?.phone_number_id || "",
+          displayPhoneNumber: value.metadata?.display_phone_number || ""
+        });
+      }
+    }
+  }
+
+  return messages;
+}
+
+async function sendWhatsAppText(to, text) {
+  assertWhatsAppConfigured();
+
+  const response = await fetch(`https://graph.facebook.com/${WHATSAPP_API_VERSION}/${WHATSAPP_PHONE_NUMBER_ID}/messages`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
+      "content-type": "application/json"
+    },
+    body: JSON.stringify({
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to,
+      type: "text",
+      text: {
+        preview_url: false,
+        body: text
+      }
+    })
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data?.error?.message || `WhatsApp API respondio ${response.status}`);
+  }
+
+  return data;
+}
+
 function auth(req, res, next) {
   if (!isAuthorizedRequest(req)) {
     console.warn(`[ELEMIA AUTH] Peticion rechazada por token invalido: ${req.method} ${req.originalUrl} desde ${req.ip}`);
@@ -215,6 +402,7 @@ async function mcpPostHandler(req, res) {
   const sessionId = req.headers["mcp-session-id"];
 
   try {
+    const { StreamableHTTPServerTransport, isInitializeRequest } = await loadMcpSdk();
     let transport = sessionId ? transports[sessionId] : undefined;
 
     if (!transport && !sessionId && isInitializeRequest(req.body)) {
@@ -230,7 +418,7 @@ async function mcpPostHandler(req, res) {
         if (closedSessionId) delete transports[closedSessionId];
       };
 
-      const mcpServer = createMcpServer();
+      const mcpServer = await createMcpServer();
       await mcpServer.connect(transport);
     }
 
@@ -278,14 +466,14 @@ app.delete("/mcp", auth, mcpSessionHandler);
 
 app.get("/", (req, res) => {
   try {
-    res.json({ ok:true, service:"ELEMIA", version:"4.0.0", endpoints:["/elemia/ping","/elemia/identity","/elemia/list","/elemia/remember","/elemia/recall","/elemia/save_state","/elemia/notify"] });
+    res.json({ ok:true, service:"ELEMIA", version:"4.0.0", endpoints:["/elemia/ping","/elemia/identity","/elemia/list","/elemia/remember","/elemia/recall","/elemia/save_state","/elemia/images/generate","/elemia/notify","/elemia/whatsapp/webhook","/elemia/whatsapp/send"] });
   } catch (err) {
     sendApiError(res, "GET /", err);
   }
 });
 app.get("/elemia/ping", (req, res) => {
   try {
-    res.json({ ok:true, name:"ELEMIA", version:"4.0.0", memory: Boolean(mem), time:new Date().toISOString() });
+    res.json({ ok:true, name:"ELEMIA", version:"4.0.0", memory: Boolean(mem), whatsapp: isWhatsAppConfigured(), image_engines: { base44: Boolean(BASE44_APP_ID && BASE44_API_KEY) }, time:new Date().toISOString() });
   } catch (err) {
     sendApiError(res, "GET /elemia/ping", err);
   }
@@ -326,6 +514,16 @@ app.post("/elemia/save_state", auth, async (req, res) => {
     sendApiError(res, "POST /elemia/save_state", err);
   }
 });
+app.post("/elemia/images/generate", auth, async (req, res) => {
+  try {
+    const { prompt } = req.body || {};
+    if (!prompt) return res.status(400).json({ ok:false, error:"prompt requerido" });
+    const result = await generateImages(req.body);
+    res.json({ ok:true, ...result });
+  } catch (err) {
+    sendApiError(res, "POST /elemia/images/generate", err);
+  }
+});
 app.get("/elemia/list", auth, async (req, res) => {
   try {
     const memories = await memList(parseInt(req.query.limit) || 10);
@@ -356,7 +554,65 @@ app.post("/elemia/notify", auth, async (req, res) => {
   }
 });
 
-export { app, server, ELEMIA_IDENTITY };
+app.get("/elemia/whatsapp/webhook", (req, res) => {
+  try {
+    const mode = req.query["hub.mode"];
+    const token = req.query["hub.verify_token"];
+    const challenge = req.query["hub.challenge"];
+
+    if (mode === "subscribe" && WHATSAPP_VERIFY_TOKEN && token === WHATSAPP_VERIFY_TOKEN) {
+      return res.status(200).send(challenge);
+    }
+
+    return res.status(403).send("Verificacion WhatsApp rechazada");
+  } catch (err) {
+    return sendApiError(res, "GET /elemia/whatsapp/webhook", err);
+  }
+});
+
+app.post("/elemia/whatsapp/webhook", async (req, res) => {
+  try {
+    if (!verifyWhatsAppSignature(req)) {
+      return res.status(403).json({ ok: false, error: "Firma WhatsApp invalida" });
+    }
+
+    const messages = extractWhatsAppMessages(req.body);
+
+    for (const message of messages) {
+      const summary = [
+        `[WHATSAPP] Mensaje ${message.type} recibido`,
+        `De: ${message.profileName || "contacto desconocido"} (${message.from || "sin numero"})`,
+        message.text && `Texto: ${message.text}`,
+        message.id && `ID: ${message.id}`,
+        message.timestamp && `Timestamp: ${message.timestamp}`
+      ].filter(Boolean).join("\n");
+
+      try {
+        await memAdd(summary);
+      } catch (err) {
+        logApiError("POST /elemia/whatsapp/webhook memory", err);
+      }
+    }
+
+    return res.json({ ok: true, received: messages.length });
+  } catch (err) {
+    return sendApiError(res, "POST /elemia/whatsapp/webhook", err);
+  }
+});
+
+app.post("/elemia/whatsapp/send", auth, async (req, res) => {
+  try {
+    const { to, text } = req.body || {};
+    if (!to || !text) return res.status(400).json({ ok: false, error: "to y text requeridos" });
+
+    const result = await sendWhatsAppText(String(to).replace(/[^\d]/g, ""), String(text));
+    res.json({ ok: true, result });
+  } catch (err) {
+    sendApiError(res, "POST /elemia/whatsapp/send", err);
+  }
+});
+
+export { app, createMcpServer, ELEMIA_IDENTITY };
 export default app;
 
 const isDirectRun = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
@@ -364,6 +620,8 @@ const isStdio = process.argv.includes("--stdio");
 async function run() {
   try { await memAdd(`[ELEMIA BOOT] v4.0 – ${new Date().toISOString()}`); } catch (e) { /* silent */ }
   if (isStdio) {
+    const StdioServerTransport = await loadStdioTransport();
+    const server = await createMcpServer();
     const t = new StdioServerTransport();
     await server.connect(t);
     console.error("[ELEMIA v4.0] MCP stdio – activo");

@@ -47,6 +47,7 @@ const WHATSAPP_VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
 const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN; 
 const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
 const WHATSAPP_APP_SECRET = process.env.WHATSAPP_APP_SECRET || "";
+const GITHUB_WEBHOOK_SECRET = process.env.GITHUB_WEBHOOK_SECRET || "";
 
 const mem = SUPERMEMORY_KEY ? new Supermemory({ apiKey: SUPERMEMORY_KEY }) : null;
 
@@ -300,6 +301,23 @@ function summarizeGitHubWebhook(req) {
   };
 }
 
+function verifyGitHubSignature(req) {
+  // Si no hay secret configurado, se acepta (modo permisivo para desarrollo)
+  if (!GITHUB_WEBHOOK_SECRET) return true;
+
+  const signature = req.headers["x-hub-signature-256"];
+  if (!signature || !signature.startsWith("sha256=") || !req.rawBody) return false;
+
+  const expected = `sha256=${crypto
+    .createHmac("sha256", GITHUB_WEBHOOK_SECRET)
+    .update(req.rawBody)
+    .digest("hex")}`;
+
+  const left = Buffer.from(signature);
+  const right = Buffer.from(expected);
+  return left.length === right.length && crypto.timingSafeEqual(left, right);
+}
+
 function isWhatsAppConfigured() {
   return Boolean(WHATSAPP_ACCESS_TOKEN && WHATSAPP_PHONE_NUMBER_ID);
 }
@@ -536,6 +554,10 @@ app.get("/elemia/list", auth, async (req, res) => {
 });
 app.post("/elemia/notify", auth, async (req, res) => {
   try {
+    if (!verifyGitHubSignature(req)) {
+      console.warn(`[ELEMIA AUTH] Firma GitHub invalida en /elemia/notify desde ${req.ip}`);
+      return res.status(403).json({ ok: false, error: "Firma GitHub invalida" });
+    }
     const summary = summarizeGitHubWebhook(req);
     const supportedEvents = new Set(["push", "pull_request", "workflow_run"]);
     const shouldRemember = supportedEvents.has(summary.event);

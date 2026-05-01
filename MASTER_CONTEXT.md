@@ -86,6 +86,7 @@ Se validaron como variables criticas:
 ```text
 SUPERMEMORY_API_KEY
 ELEMIA_HTTP_TOKEN
+GITHUB_WEBHOOK_SECRET
 WHATSAPP_VERIFY_TOKEN
 WHATSAPP_ACCESS_TOKEN
 WHATSAPP_PHONE_NUMBER_ID
@@ -165,7 +166,7 @@ Si no hay contexto conversacional, este es el nucleo:
   "deployments": ["Vercel", "Render"],
   "health_endpoint": "/elemia/ping",
   "auth_header": "x-elemia-token",
-  "next_direction": "Integracion de agentes, dashboard privado y autonomia preventiva"
+  "next_direction": "Fase 2 activa: firma GitHub en /elemia/notify. Siguiente: dashboard privado (Fase 3)"
 }
 ```
 

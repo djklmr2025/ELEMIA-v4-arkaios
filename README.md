@@ -29,7 +29,6 @@ Instalacion por ".json"
   }
 }
 
-
 ELEMIA esta construida sobre una base Node.js moderna con modulos ES, Express y el SDK oficial de Model Context Protocol.
 
 | Capa | Funcion |

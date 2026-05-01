@@ -37,15 +37,15 @@ const ELEMIA_IDENTITY = {
   }
 };
 
-const SUPERMEMORY_KEY = process.env.SUPERMEMORY_API_KEY || "sm_j5Cq3nFy8f3XdEawnvoQRY_YrddDVWjhRMwYowJOHZTSdxvnCsAkyOooTmZNtecUVkxbdYwtQsGqCdhQJdAzWyH";
-const BASE44_APP_ID = process.env.BASE44_APP_ID || "68f311926eef5b3eb520aaf0";
-const BASE44_API_KEY = process.env.BASE44_API_KEY || "75c4024efb4b47ad9b9a7451992fa0bb";
+const SUPERMEMORY_KEY = process.env.SUPERMEMORY_API_KEY;
+const BASE44_APP_ID = process.env.BASE44_APP_ID;
+const BASE44_API_KEY = process.env.BASE44_API_KEY;
 const BASE44_API_BASE = process.env.BASE44_API_BASE || "https://arkaios2025.base44.app/api";
 const BASE44_IMAGE_ENDPOINT = process.env.BASE44_IMAGE_ENDPOINT || "GenerateImage";
 const WHATSAPP_API_VERSION = process.env.WHATSAPP_API_VERSION || "v23.0";
-const WHATSAPP_VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || "arkaios_whatsapp_verify_2025";
-const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN || "EAAYZAnmCZA... (refer to KEYS.md)"; 
-const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID || "5217111034057";
+const WHATSAPP_VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN;
+const WHATSAPP_ACCESS_TOKEN = process.env.WHATSAPP_ACCESS_TOKEN; 
+const WHATSAPP_PHONE_NUMBER_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
 const WHATSAPP_APP_SECRET = process.env.WHATSAPP_APP_SECRET || "";
 
 const mem = SUPERMEMORY_KEY ? new Supermemory({ apiKey: SUPERMEMORY_KEY }) : null;

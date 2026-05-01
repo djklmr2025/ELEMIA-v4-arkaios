@@ -552,7 +552,7 @@ app.get("/elemia/list", auth, async (req, res) => {
     sendApiError(res, "GET /elemia/list", err);
   }
 });
-app.post("/elemia/notify", auth, async (req, res) => {
+app.post("/elemia/notify", async (req, res) => {
   try {
     if (!verifyGitHubSignature(req)) {
       console.warn(`[ELEMIA AUTH] Firma GitHub invalida en /elemia/notify desde ${req.ip}`);

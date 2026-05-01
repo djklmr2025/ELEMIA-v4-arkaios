@@ -12,6 +12,10 @@ La arquitectura esta disenada para operar como puente entre agentes, aplicacione
 
 Instalacion por ".json"
 
+### Instalación por ".json"
+
+Para integrar a **ELEMIA v4.0** en tu cliente MCP, añade la siguiente configuración:
+```json
 {
   "mcpServers": {
     "elemia": {

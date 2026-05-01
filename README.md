@@ -10,6 +10,26 @@ La arquitectura esta disenada para operar como puente entre agentes, aplicacione
 
 ## 🏛️ Arquitectura
 
+Instalacion por ".json"
+
+{
+  "mcpServers": {
+    "elemia": {
+      "command": "node",
+      "args": [
+        "C:\\arkaios\\ELEMIA-v4\\server-elemia.mjs",
+        "--stdio"
+      ],
+      "env": {
+        "SUPERMEMORY_API_KEY": "sm_j5Cq3nFy8f3XdEawnvoQRY_YrddDVWjhRMwYowJOHZTSdxvnCsAkyOooTmZNtecUVkxbdYwtQsGqCdhQJdAzWyH",
+        "ELEMIA_HTTP_TOKEN": "ARKAIOS-SECURE-2025-ELEMIA-V4",
+        "ELEMIA_TOKEN": "ARKAIOS-SECURE-2025-ELEMIA-V4"
+      }
+    }
+  }
+}
+
+
 ELEMIA esta construida sobre una base Node.js moderna con modulos ES, Express y el SDK oficial de Model Context Protocol.
 
 | Capa | Funcion |

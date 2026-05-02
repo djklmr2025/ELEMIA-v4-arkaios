@@ -23,6 +23,8 @@ services:
         sync: false
       - key: WHATSAPP_API_VERSION
         value: v23.0
+      - key: ELEMIA_VAULT_KEY
+        sync: false
       - key: GITHUB_WEBHOOK_SECRET
         sync: false
       - key: BASE44_APP_ID

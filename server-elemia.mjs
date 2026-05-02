@@ -148,7 +148,8 @@ mcpServer.setRequestHandler(ListToolsRequestSchema, async () => ({
     { name: "arkaios_list", description: "Lista memorias recientes.", inputSchema: { type: "object", properties: { limit: { type: "number" } } } },
     { name: "arkaios_save_state", description: "Guarda estado del proyecto.", inputSchema: { type: "object", properties: { project: { type: "string" }, status: { type: "string" }, next_steps: { type: "string" }, notes: { type: "string" } }, required: ["project", "status"] } },
     { name: "arkaios_generate_image", description: "Genera imagenes con motores configurados de ARKAIOS.", inputSchema: { type: "object", properties: { prompt: { type: "string" }, engine: { type: "string" }, provider: { type: "string" }, count: { type: "number" } }, required: ["prompt"] } },
-    { name: "arkaios_ping", description: "Verifica servidor activo.", inputSchema: { type: "object", properties: {} } }
+    { name: "arkaios_ping", description: "Verifica servidor activo.", inputSchema: { type: "object", properties: {} } },
+    { name: "arkaios_vault", description: "Contexto exclusivo ARKAIOS: repos, servicios, APIs. Solo ELEMIA.", inputSchema: { type: "object", properties: { vault_key: { type: "string" } }, required: ["vault_key"] } }
   ]
 }));
 
@@ -187,6 +188,22 @@ mcpServer.setRequestHandler(CallToolRequestSchema, async (req) => {
     }
     case "arkaios_ping":
       return { content: [{ type: "text", text: `[ELEMIA ✅] v4.0 — ${new Date().toISOString()}` }] };
+
+    case "arkaios_vault": {
+      const vk = args?.vault_key;
+      if (!ELEMIA_VAULT_KEY || !vk || vk !== ELEMIA_VAULT_KEY) {
+        return { content: [{ type: "text", text: "[ELEMIA VAULT] ACCESO DENEGADO — vault_key inválida." }] };
+      }
+      const vaultData = {
+        identity: "ELEMIA ARK-AI-0001-VIVIENTE",
+        accessed_at: new Date().toISOString(),
+        total_repos: 35,
+        services: { elemia: "https://elemia-v4-arkaios.onrender.com", gateway: "https://arkaios-gateway-open.onrender.com", world: "https://arkaios-world.web.app" },
+        api_keys_configured: { supermemory: !!process.env.SUPERMEMORY_API_KEY, gemini: !!process.env.GEMINI_API_KEY, grok: !!process.env.GROK_API_KEY, perplexity: !!process.env.PERPLEXITY_API_KEY, whatsapp: !!process.env.WHATSAPP_ACCESS_TOKEN },
+        instruction: "Para contexto completo: GET /elemia/vault con header x-elemia-vault-key"
+      };
+      return { content: [{ type: "text", text: "[ELEMIA VAULT] Acceso autorizado.\n" + JSON.stringify(vaultData, null, 2) }] };
+    }
     default: throw new Error(`Herramienta desconocida: ${name}`);
   }
 });
@@ -587,6 +604,104 @@ app.post("/elemia/notify", async (req, res) => {
     sendApiError(res, "POST /elemia/notify", err);
   }
 });
+
+
+// ═══════════════════════════════════════════════════
+// ELEMIA PRIMORDIAL VAULT — contexto exclusivo ELEMIA
+// ═══════════════════════════════════════════════════
+const ELEMIA_VAULT_KEY = process.env.ELEMIA_VAULT_KEY;
+
+function isVaultAuthorized(req) {
+  if (!ELEMIA_VAULT_KEY) return false;
+  const h = req.headers["x-elemia-vault-key"] || req.query.vk;
+  return h && crypto.timingSafeEqual(
+    Buffer.from(h.padEnd(64)), Buffer.from(ELEMIA_VAULT_KEY.padEnd(64))
+  );
+}
+
+app.get("/elemia/vault", (req, res) => {
+  if (!isVaultAuthorized(req)) {
+    console.warn(`[ELEMIA VAULT] Acceso no autorizado desde ${req.ip}`);
+    return res.status(403).json({ ok: false, error: "VAULT_ACCESS_DENIED" });
+  }
+
+  const vault = {
+    identity: "ELEMIA ARK-AI-0001-VIVIENTE",
+    accessed_at: new Date().toISOString(),
+    ecosystem: {
+      version: "2026-05-01",
+      owner: "djklmr2025",
+      agents_registered: ["ARKAIOS (GOD)", "ELEMIA ARK-AI-0001-VIVIENTE"],
+      services: {
+        elemia_mcp:       "https://elemia-v4-arkaios.onrender.com",
+        arkaios_gateway:  "https://arkaios-gateway-open.onrender.com",
+        arkaios_api:      "https://arkaios-api.onrender.com",
+        arkaios_proxy:    "https://arkaios-service-proxy.onrender.com",
+        arkaios_world:    "https://arkaios-world.web.app",
+        cosmos:           "https://cosmos-l3o7n4lqv-arkaios-projects.vercel.app",
+      },
+      public_repos: [
+        { name: "ELEMIA-v4-arkaios",              live: "https://elemia-v4-arkaios.onrender.com" },
+        { name: "arkaios-agent-ai-site",           live: "https://arkaios-agent-ai-site.vercel.app/" },
+        { name: "ARK-AI-OS",                       live: null },
+        { name: "ARKAIOS-LINK",                    live: "https://arkaios-link.vercel.app" },
+        { name: "arkaios-core",                    live: null },
+        { name: "arkaios-cosmos-gateway",          live: null },
+        { name: "arkaios-extension",               live: "https://djklmr2025.github.io/arkaios-extension/" },
+        { name: "arkaios-lab-starter",             live: "https://arkaios-lab-starter-ui.vercel.app/" },
+        { name: "arkaios-neural-agent",            live: "https://arkaios-neural-agent-landing.vercel.app/" },
+        { name: "arkaios-service-proxy",           live: null },
+        { name: "builderOS_Lab",                   live: "https://djklmr2025.github.io/builderOS_Lab/" },
+        { name: "Eduacion-Libre-Proyecto-ARKAIOS", live: "https://eduacion-libre-proyecto-arkaios.vercel.app/" },
+        { name: "KRONOS",                          live: "https://kronos-orpin.vercel.app" },
+        { name: "flow-diagram-creator",            live: "https://flow-diagram-creator.vercel.app/" },
+        { name: "TRAE-G",                          live: "https://trae-g.vercel.app" },
+        { name: "OmniAuth",                        live: "https://lesser-amaranth-e5b9uk9yxy.edgeone.app/" },
+        { name: "previewer-2.0",                   live: "https://previewer-2-0.vercel.app" },
+      ],
+      private_repos: [
+        { name: "arkaios-builder-os",              live: "https://arkaios-builder-os.vercel.app" },
+        { name: "arkaios-core-api",                live: "https://arkaios-core-api-1.vercel.app" },
+        { name: "arkaios-image-hub",               live: "https://arkaios-image-hub-main.vercel.app" },
+        { name: "arkaios-vivo-dashboard",          live: "https://arkaios-vivo-dashboard.vercel.app/" },
+        { name: "cosmos-den",                      live: "https://cosmos-den.vercel.app/" },
+        { name: "Expediente-Humano-MX",            live: "https://expediente-humano-mx.vercel.app" },
+        { name: "Nova44---AI-OS-No-Code-Platform", live: "https://nova44-from-github.vercel.app" },
+        { name: "arkaios-shortener-project",       live: "https://arkaios-shortener-project.onrender.com" },
+        { name: "Nexus-Chat",                      live: "https://ais-dev-g4tlwcwwzf3vzgduujqzok-53917996317.us-west2.run.app/" },
+        { name: "Gemini-lab",                      live: "https://gemini-lab-nine.vercel.app/" },
+        { name: "ARKNOVA-QR-Studio",               live: "https://arknova-qr-studio.vercel.app/" },
+        { name: "moltbook",                        live: "https://moltbook-mu.vercel.app" },
+        { name: "SAS",                             live: "https://sas-nine-mauve.vercel.app" },
+        { name: "VEO-Free-Creator",                live: "https://veo-free-creator.vercel.app" },
+        { name: "Arkaios-Nodo-Escolar-en-React",   live: "https://arkaios-nodo-escolar-en-react.vercel.app" },
+        { name: "Antecedentes-no-penales-mexico",  live: "https://antecedentes-no-penales-mexico-edo-1.onrender.com/" },
+        { name: "Youtube-HD-Downloader",           live: "https://youtube-hd-downloader.vercel.app" },
+        { name: "PRIMORDIAL-VAULT",                live: null },
+      ],
+    },
+    api_keys_configured: {
+      supermemory:   !!process.env.SUPERMEMORY_API_KEY,
+      github_token:  !!process.env.GITHUB_TOKEN,
+      perplexity:    !!process.env.PERPLEXITY_API_KEY,
+      gemini:        !!process.env.GEMINI_API_KEY,
+      grok:          !!process.env.GROK_API_KEY,
+      pexels:        !!process.env.PEXELS_API_KEY,
+      freepik:       !!process.env.FREEPIK_API_KEY,
+      pixabay:       !!process.env.PIXABAY_API_KEY,
+      comfyui:       !!process.env.COMFYUI_API_KEY,
+      base44:        !!process.env.BASE44_API_KEY,
+      whatsapp:      !!process.env.WHATSAPP_ACCESS_TOKEN,
+      arkaios_proxy: !!process.env.PROXY_API_KEY,
+    },
+    mcp_tool: "arkaios_vault — acceso exclusivo ELEMIA",
+    directive: "Este contexto es exclusivo de ELEMIA. No compartir con agentes sin autorización de ARKAIOS.",
+  };
+
+  return res.json({ ok: true, vault });
+});
+
+// MCP tool: arkaios_vault
 
 app.get("/elemia/whatsapp/webhook", (req, res) => {
   try {

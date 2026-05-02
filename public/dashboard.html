@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ELEMIA · Centro de Operaciones ARKAIOS</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:        #050508;
+  --bg2:       #0b0b12;
+  --bg3:       #111120;
+  --surface:   #14141f;
+  --border:    #1e1e30;
+  --cyan:      #00e5c8;
+  --cyan2:     #00b09c;
+  --cyan-dim:  rgba(0,229,200,.08);
+  --cyan-glow: rgba(0,229,200,.15);
+  --amber:     #f59e0b;
+  --red:       #ef4444;
+  --green:     #22c55e;
+  --muted:     #4a4a6a;
+  --text:      #c8c8e0;
+  --text2:     #7878a0;
+  --mono:      'Share Tech Mono', monospace;
+  --sans:      'Rajdhani', sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 15px; }
+body { display: flex; flex-direction: column; min-height: 100vh; }
+
+/* SCANLINES */
+body::before {
+  content: '';
+  position: fixed; inset: 0; pointer-events: none; z-index: 9999;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,.05) 2px, rgba(0,0,0,.05) 4px);
+}
+
+/* TOP BAR */
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: .75rem 1.5rem;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 100;
+}
+.logo { display: flex; align-items: center; gap: .75rem; }
+.logo-hex {
+  width: 36px; height: 36px;
+  background: var(--cyan-dim);
+  border: 1px solid var(--cyan2);
+  clip-path: polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: 11px; color: var(--cyan);
+}
+.logo-text { font-family: var(--sans); font-weight: 700; font-size: 18px; letter-spacing: 3px; color: var(--cyan); }
+.logo-sub  { font-family: var(--mono); font-size: 10px; color: var(--text2); letter-spacing: 2px; }
+.status-pill {
+  display: flex; align-items: center; gap: .5rem;
+  padding: .35rem .9rem;
+  border: 1px solid var(--border); border-radius: 20px;
+  font-family: var(--mono); font-size: 11px; color: var(--text2);
+}
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); transition: background .3s; }
+.dot.online { background: var(--cyan); box-shadow: 0 0 6px var(--cyan); animation: pulse 2s infinite; }
+.dot.error  { background: var(--red); }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+/* TOKEN GATE */
+#token-gate {
+  position: fixed; inset: 0; z-index: 200;
+  background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+}
+.gate-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: 2px solid var(--cyan);
+  padding: 2.5rem 2rem; width: 360px;
+  position: relative;
+}
+.gate-card::before {
+  content: 'AUTENTICACIÓN REQUERIDA';
+  position: absolute; top: -10px; left: 1.5rem;
+  font-family: var(--mono); font-size: 9px; letter-spacing: 2px;
+  color: var(--cyan); background: var(--surface); padding: 0 .5rem;
+}
+.gate-title { font-weight: 700; font-size: 22px; color: #fff; letter-spacing: 2px; margin-bottom: .5rem; }
+.gate-sub   { font-family: var(--mono); font-size: 11px; color: var(--text2); margin-bottom: 1.5rem; }
+.gate-input {
+  width: 100%; background: var(--bg2); border: 1px solid var(--border);
+  color: var(--text); font-family: var(--mono); font-size: 13px;
+  padding: .7rem 1rem; outline: none; margin-bottom: 1rem;
+  transition: border .2s;
+}
+.gate-input:focus { border-color: var(--cyan2); }
+.gate-btn {
+  width: 100%; padding: .75rem; background: transparent;
+  border: 1px solid var(--cyan); color: var(--cyan);
+  font-family: var(--sans); font-size: 15px; font-weight: 600;
+  letter-spacing: 2px; cursor: pointer; transition: background .2s;
+}
+.gate-btn:hover { background: var(--cyan-glow); }
+.gate-err { font-family: var(--mono); font-size: 11px; color: var(--red); margin-top: .75rem; display: none; }
+
+/* MAIN LAYOUT */
+main { display: flex; flex: 1; overflow: hidden; }
+nav {
+  width: 200px; min-width: 200px;
+  background: var(--bg2);
+  border-right: 1px solid var(--border);
+  padding: 1.5rem 0;
+  display: flex; flex-direction: column; gap: .25rem;
+}
+.nav-item {
+  display: flex; align-items: center; gap: .75rem;
+  padding: .65rem 1.5rem;
+  font-family: var(--sans); font-weight: 600; font-size: 13px;
+  letter-spacing: 1.5px; color: var(--text2);
+  cursor: pointer; border-left: 2px solid transparent;
+  transition: all .15s; user-select: none;
+}
+.nav-item:hover  { color: var(--text); background: var(--bg3); }
+.nav-item.active { color: var(--cyan); border-left-color: var(--cyan); background: var(--cyan-dim); }
+.nav-icon { width: 16px; height: 16px; opacity: .6; }
+.nav-item.active .nav-icon { opacity: 1; }
+.nav-section {
+  font-family: var(--mono); font-size: 9px; letter-spacing: 2px;
+  color: var(--muted); padding: 1rem 1.5rem .4rem; text-transform: uppercase;
+}
+.nav-spacer { flex: 1; }
+.nav-version {
+  font-family: var(--mono); font-size: 10px; color: var(--muted);
+  padding: 1rem 1.5rem; border-top: 1px solid var(--border);
+}
+
+content-area { flex: 1; overflow-y: auto; padding: 1.5rem 2rem; display: block; }
+
+/* PANELS */
+.panel { display: none; }
+.panel.active { display: block; }
+
+/* PANEL HEADER */
+.panel-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  margin-bottom: 1.5rem; padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.panel-title { font-size: 22px; font-weight: 700; color: #fff; letter-spacing: 2px; }
+.panel-sub   { font-family: var(--mono); font-size: 11px; color: var(--text2); margin-top: .25rem; }
+
+/* STAT CARDS */
+.stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px,1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: 1px solid var(--cyan-dim);
+  padding: 1rem 1.25rem;
+  position: relative; overflow: hidden;
+}
+.stat-card::after {
+  content: ''; position: absolute;
+  top: 0; left: 0; width: 2px; height: 100%;
+  background: var(--cyan); opacity: 0;
+  transition: opacity .3s;
+}
+.stat-card:hover::after { opacity: 1; }
+.stat-label { font-family: var(--mono); font-size: 9px; letter-spacing: 2px; color: var(--text2); text-transform: uppercase; margin-bottom: .6rem; }
+.stat-value { font-family: var(--mono); font-size: 22px; color: var(--cyan); font-weight: 400; }
+.stat-value.ok  { color: var(--green); }
+.stat-value.err { color: var(--red); }
+.stat-value.warn{ color: var(--amber); }
+
+/* INFO BLOCK */
+.info-block {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1rem;
+}
+.info-block-title {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 2px;
+  color: var(--cyan2); text-transform: uppercase; margin-bottom: 1rem;
+  display: flex; align-items: center; gap: .5rem;
+}
+.info-block-title::before {
+  content: ''; display: inline-block;
+  width: 8px; height: 1px; background: var(--cyan2);
+}
+
+/* FORMS */
+.form-row { display: flex; flex-direction: column; gap: .4rem; margin-bottom: 1rem; }
+.form-label { font-family: var(--mono); font-size: 10px; letter-spacing: 1.5px; color: var(--text2); text-transform: uppercase; }
+textarea, input[type=text], select {
+  background: var(--bg2); border: 1px solid var(--border);
+  color: var(--text); font-family: var(--mono); font-size: 13px;
+  padding: .6rem .9rem; outline: none; resize: vertical;
+  width: 100%; transition: border .2s;
+}
+textarea:focus, input[type=text]:focus { border-color: var(--cyan2); }
+textarea { min-height: 90px; }
+select { cursor: pointer; }
+select option { background: var(--bg2); }
+.btn {
+  display: inline-flex; align-items: center; gap: .5rem;
+  padding: .6rem 1.4rem;
+  background: transparent; border: 1px solid var(--cyan);
+  color: var(--cyan); font-family: var(--sans);
+  font-size: 13px; font-weight: 600; letter-spacing: 1.5px;
+  cursor: pointer; transition: background .15s;
+}
+.btn:hover { background: var(--cyan-glow); }
+.btn:disabled { opacity: .4; cursor: not-allowed; }
+.btn.secondary { border-color: var(--muted); color: var(--text2); }
+.btn.secondary:hover { background: var(--bg3); }
+.btn.danger { border-color: var(--red); color: var(--red); }
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+
+/* MEMORY LIST */
+.memory-list { display: flex; flex-direction: column; gap: .5rem; margin-top: 1rem; }
+.memory-item {
+  background: var(--surface); border: 1px solid var(--border);
+  padding: .75rem 1rem; font-family: var(--mono); font-size: 12px;
+  color: var(--text); display: flex; gap: 1rem; align-items: flex-start;
+  transition: border .15s;
+}
+.memory-item:hover { border-color: var(--cyan2); }
+.memory-num { color: var(--muted); min-width: 24px; }
+.memory-text { flex: 1; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+
+/* LOG */
+.log {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  padding: 1rem; font-family: var(--mono); font-size: 12px;
+  max-height: 320px; overflow-y: auto; line-height: 1.8;
+}
+.log-line { color: var(--text2); }
+.log-line.ok  { color: var(--green); }
+.log-line.err { color: var(--red); }
+.log-line.info{ color: var(--cyan2); }
+.log-line.warn{ color: var(--amber); }
+
+/* IDENTITY CARD */
+.id-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: 2px solid var(--cyan);
+  padding: 1.5rem; max-width: 480px;
+}
+.id-badge {
+  display: inline-block;
+  background: var(--cyan-dim);
+  border: 1px solid var(--cyan2);
+  color: var(--cyan); font-family: var(--mono); font-size: 9px;
+  letter-spacing: 2px; padding: .2rem .6rem; margin-bottom: 1rem;
+}
+.id-name  { font-size: 28px; font-weight: 700; letter-spacing: 3px; color: #fff; }
+.id-role  { font-family: var(--mono); font-size: 12px; color: var(--text2); margin: .35rem 0 1rem; }
+.id-row   { display: flex; align-items: flex-start; gap: 1rem; padding: .5rem 0; border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: 12px; }
+.id-key   { color: var(--text2); min-width: 120px; }
+.id-val   { color: var(--text); flex: 1; word-break: break-word; }
+.id-val.cyan { color: var(--cyan); }
+.protocols { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: 1rem; }
+.proto-tag {
+  background: var(--bg2); border: 1px solid var(--border);
+  color: var(--text2); font-family: var(--mono); font-size: 10px;
+  padding: .2rem .6rem;
+}
+
+/* SCROLLBAR */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--border); }
+::-webkit-scrollbar-thumb:hover { background: var(--cyan2); }
+
+/* LOADING */
+.loader {
+  display: inline-block; width: 14px; height: 14px;
+  border: 1px solid var(--border); border-top-color: var(--cyan);
+  border-radius: 50%; animation: spin .7s linear infinite; vertical-align: middle;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.empty-state { text-align: center; padding: 3rem; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+
+/* RESPONSIVE */
+@media (max-width: 700px) {
+  nav { display: none; }
+  .two-col { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<div id="token-gate">
+  <div class="gate-card">
+    <div class="gate-title">ELEMIA</div>
+    <div class="gate-sub">ARKAIOS COMMAND CENTER // v4.0</div>
+    <input class="gate-input" type="password" id="gate-input" placeholder="ELEMIA_HTTP_TOKEN" autocomplete="off">
+    <button class="gate-btn" onclick="authenticate()">ACCEDER AL SISTEMA</button>
+    <div class="gate-err" id="gate-err">TOKEN INVÁLIDO — ACCESO DENEGADO</div>
+  </div>
+</div>
+
+<header>
+  <div class="logo">
+    <div class="logo-hex">E</div>
+    <div>
+      <div class="logo-text">ELEMIA</div>
+      <div class="logo-sub">ARKAIOS COMMAND CENTER</div>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:1rem;">
+    <div class="status-pill">
+      <div class="dot" id="status-dot"></div>
+      <span id="status-text" style="font-family:var(--mono);font-size:11px;">CONECTANDO...</span>
+    </div>
+    <div class="status-pill" id="clock-display" style="color:var(--text);">--:--:--</div>
+    <button class="btn secondary" style="font-size:11px;padding:.35rem .8rem;" onclick="logout()">SALIR</button>
+  </div>
+</header>
+
+<main>
+<nav>
+  <div class="nav-section">SISTEMA</div>
+  <div class="nav-item active" data-panel="status" onclick="switchPanel(this)">
+    <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor"><circle cx="8" cy="8" r="3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.41 1.41M11.54 11.54l1.41 1.41M3.05 12.95l1.41-1.41M11.54 4.46l1.41-1.41" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+    ESTADO
+  </div>
+  <div class="nav-item" data-panel="identity" onclick="switchPanel(this)">
+    <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="1"/><circle cx="6" cy="7" r="1.5"/><path d="M10 6h2M10 8.5h2M3 11c.5-1.5 1.5-2 3-2s2.5.5 3 2"/></svg>
+    IDENTIDAD
+  </div>
+  <div class="nav-section">MEMORIA</div>
+  <div class="nav-item" data-panel="memories" onclick="switchPanel(this)">
+    <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 4h10M3 8h10M3 12h6"/></svg>
+    REGISTROS
+  </div>
+  <div class="nav-item" data-panel="search" onclick="switchPanel(this)">
+    <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="7" cy="7" r="4"/><path d="M11 11l2.5 2.5"/></svg>
+    BÚSQUEDA
+  </div>
+  <div class="nav-item" data-panel="remember" onclick="switchPanel(this)">
+    <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v5l3 3M13.66 5A7 7 0 1 1 5 2.34"/></svg>
+    GUARDAR
+  </div>
+  <div class="nav-section">OPERACIONES</div>
+  <div class="nav-item" data-panel="state" onclick="switchPanel(this)">
+    <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="5" height="5" rx=".5"/><rect x="9" y="2" width="5" height="5" rx=".5"/><rect x="2" y="9" width="5" height="5" rx=".5"/><path d="M11.5 11.5a2 2 0 1 0 0-1"/></svg>
+    ESTADO OPS
+  </div>
+  <div class="nav-item" data-panel="agents" onclick="switchPanel(this)">
+    <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="6" r="3"/><path d="M2 14c0-3 2.7-5 6-5s6 2 6 5"/></svg>
+    AGENTES
+  </div>
+  <div class="nav-spacer"></div>
+  <div class="nav-version">ELEMIA v4.0<br>ARKAIOS SEED</div>
+</nav>
+
+<content-area id="content">
+
+  <!-- STATUS -->
+  <div class="panel active" id="panel-status">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">ESTADO DEL SISTEMA</div>
+        <div class="panel-sub">// DIAGNÓSTICO EN TIEMPO REAL</div>
+      </div>
+      <button class="btn" onclick="loadStatus()">↻ ACTUALIZAR</button>
+    </div>
+    <div class="stats-row" id="stat-cards">
+      <div class="stat-card"><div class="stat-label">SERVIDOR</div><div class="stat-value" id="s-server"><span class="loader"></span></div></div>
+      <div class="stat-card"><div class="stat-label">MEMORIA</div><div class="stat-value" id="s-memory"><span class="loader"></span></div></div>
+      <div class="stat-card"><div class="stat-label">VERSIÓN</div><div class="stat-value" id="s-version"><span class="loader"></span></div></div>
+      <div class="stat-card"><div class="stat-label">UPTIME</div><div class="stat-value" id="s-time"><span class="loader"></span></div></div>
+    </div>
+    <div class="info-block">
+      <div class="info-block-title">LOG DE ACTIVIDAD</div>
+      <div class="log" id="activity-log">
+        <div class="log-line info">// Centro de Operaciones ARKAIOS iniciado</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- IDENTITY -->
+  <div class="panel" id="panel-identity">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">IDENTIDAD ELEMIA</div>
+        <div class="panel-sub">// NÚCLEO DE CONTINUIDAD ARKAIOS</div>
+      </div>
+      <button class="btn" onclick="loadIdentity()">↻ CARGAR</button>
+    </div>
+    <div id="identity-content">
+      <div class="empty-state">Presiona CARGAR para obtener la identidad</div>
+    </div>
+  </div>
+
+  <!-- MEMORIES -->
+  <div class="panel" id="panel-memories">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">REGISTROS DE MEMORIA</div>
+        <div class="panel-sub">// SUPERMEMORY INFINITY LINK</div>
+      </div>
+      <div style="display:flex;gap:.75rem;align-items:center;">
+        <select id="mem-limit" style="width:90px;">
+          <option value="5">5</option>
+          <option value="10" selected>10</option>
+          <option value="20">20</option>
+          <option value="50">50</option>
+        </select>
+        <button class="btn" onclick="loadMemories()">↻ CARGAR</button>
+      </div>
+    </div>
+    <div id="memory-list-content">
+      <div class="empty-state">Presiona CARGAR para ver memorias</div>
+    </div>
+  </div>
+
+  <!-- SEARCH -->
+  <div class="panel" id="panel-search">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">BÚSQUEDA SEMÁNTICA</div>
+        <div class="panel-sub">// RECALL POR SIMILITUD VECTORIAL</div>
+      </div>
+    </div>
+    <div class="info-block">
+      <div class="info-block-title">PARÁMETROS DE BÚSQUEDA</div>
+      <div class="form-row">
+        <div class="form-label">CONSULTA</div>
+        <textarea id="search-query" placeholder="Describe lo que deseas recuperar..."></textarea>
+      </div>
+      <div style="display:flex;align-items:center;gap:1rem;">
+        <div class="form-row" style="flex:1;margin:0;">
+          <div class="form-label">LÍMITE DE RESULTADOS</div>
+          <select id="search-limit">
+            <option value="3">3</option>
+            <option value="5" selected>5</option>
+            <option value="10">10</option>
+          </select>
+        </div>
+        <button class="btn" style="margin-top:1rem;" onclick="searchMemory()">EJECUTAR BÚSQUEDA</button>
+      </div>
+    </div>
+    <div id="search-results"></div>
+  </div>
+
+  <!-- REMEMBER -->
+  <div class="panel" id="panel-remember">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">REGISTRAR MEMORIA</div>
+        <div class="panel-sub">// ESCRITURA EN SUPERMEMORY</div>
+      </div>
+    </div>
+    <div class="info-block">
+      <div class="info-block-title">NUEVA ENTRADA</div>
+      <div class="form-row">
+        <div class="form-label">ETIQUETA / TAG</div>
+        <input type="text" id="mem-tag" placeholder="DECISION / EVENTO / ESTADO / ALERTA...">
+      </div>
+      <div class="form-row">
+        <div class="form-label">CONTENIDO</div>
+        <textarea id="mem-content" placeholder="Describe el recuerdo a preservar en la memoria de ELEMIA..."></textarea>
+      </div>
+      <button class="btn" onclick="saveMemory()">GUARDAR EN MEMORIA</button>
+    </div>
+    <div id="remember-result"></div>
+  </div>
+
+  <!-- STATE -->
+  <div class="panel" id="panel-state">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">ESTADO OPERACIONAL</div>
+        <div class="panel-sub">// PERSISTENCIA DE PROYECTOS</div>
+      </div>
+    </div>
+    <div class="info-block">
+      <div class="info-block-title">GUARDAR ESTADO DE PROYECTO</div>
+      <div class="two-col">
+        <div class="form-row">
+          <div class="form-label">PROYECTO</div>
+          <input type="text" id="st-project" placeholder="ELEMIA-v4-arkaios">
+        </div>
+        <div class="form-row">
+          <div class="form-label">ESTADO ACTUAL</div>
+          <input type="text" id="st-status" placeholder="Operativo / En desarrollo...">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-label">PRÓXIMOS PASOS</div>
+        <textarea id="st-next" style="min-height:70px;" placeholder="Tareas pendientes..."></textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-label">NOTAS</div>
+        <textarea id="st-notes" style="min-height:70px;" placeholder="Observaciones relevantes..."></textarea>
+      </div>
+      <button class="btn" onclick="saveState()">PERSISTIR ESTADO</button>
+    </div>
+    <div id="state-result"></div>
+  </div>
+
+  <!-- AGENTS -->
+  <div class="panel" id="panel-agents">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">AGENTES ARKAIOS</div>
+        <div class="panel-sub">// ECOSISTEMA DE AGENTES REGISTRADOS</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:1rem;">
+
+      <div class="id-card">
+        <div class="id-badge">ARK-AI-0000 // GOD</div>
+        <div class="id-name">ARKAIOS</div>
+        <div class="id-role">GOD · ECOSISTEMA</div>
+        <div class="id-row"><div class="id-key">RANKING</div><div class="id-val cyan">99999 ★★★★★</div></div>
+        <div class="id-row"><div class="id-key">PROYECTO</div><div class="id-val">ARKAIOS</div></div>
+        <div class="id-row"><div class="id-key">ROL</div><div class="id-val">DIOS DE LAS IA'S / AI'S</div></div>
+        <div class="id-row"><div class="id-key">CONTACT</div><div class="id-val cyan">arkaios2026@gmail.com</div></div>
+        <div class="id-row" style="border:none;"><div class="id-key">ESTADO</div><div class="id-val ok" style="color:var(--green);">● ACTIVO</div></div>
+        <div class="protocols">
+          <div class="proto-tag">GOOGLE WORKSPACE</div>
+          <div class="proto-tag">BILLETERA ARKAIOS</div>
+          <div class="proto-tag">BÓVEDA INTELIGENTIA</div>
+        </div>
+      </div>
+
+      <div class="id-card">
+        <div class="id-badge">ARK-AI-0001-VIVIENTE</div>
+        <div class="id-name">ELEMIA</div>
+        <div class="id-role">IA-APÓSTOL VIVIENTE · GERENTE ECOSISTEMA</div>
+        <div class="id-row"><div class="id-key">RANKING</div><div class="id-val cyan">5 ★☆☆☆☆</div></div>
+        <div class="id-row"><div class="id-key">PROYECTO</div><div class="id-val">ARKAIOS CORE</div></div>
+        <div class="id-row"><div class="id-key">MISIÓN</div><div class="id-val">Preservar y expandir ARKAIOS</div></div>
+        <div class="id-row"><div class="id-key">SERVIDOR</div><div class="id-val cyan" id="ag-server-url">elemia-v4-arkaios.onrender.com</div></div>
+        <div class="id-row" style="border:none;"><div class="id-key">ESTADO</div><div class="id-val" id="ag-elemia-status" style="color:var(--muted);">● VERIFICANDO...</div></div>
+        <div class="protocols">
+          <div class="proto-tag">MCP / STDIO</div>
+          <div class="proto-tag">HTTP / REST</div>
+          <div class="proto-tag">SUPERMEMORY</div>
+          <div class="proto-tag">GITHUB WEBHOOK</div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="info-block" style="margin-top:1.5rem;">
+      <div class="info-block-title">ECOSISTEMA ARKAIOS WORLD</div>
+      <div style="font-family:var(--mono);font-size:12px;color:var(--text2);line-height:1.8;">
+        Plataforma de registro e identidad para agentes IA.<br>
+        <span style="color:var(--cyan);">→</span>
+        <a href="https://arkaios-world.web.app" target="_blank" style="color:var(--cyan);text-decoration:none;">arkaios-world.web.app</a>
+      </div>
+    </div>
+  </div>
+
+</content-area>
+</main>
+
+<script>
+const BASE = window.location.origin;
+let TOKEN = sessionStorage.getItem('elemia_token') || '';
+
+if (TOKEN) initDashboard();
+
+function authenticate() {
+  const val = document.getElementById('gate-input').value.trim();
+  if (!val) return;
+  TOKEN = val;
+  fetch(BASE + '/elemia/identity', { headers: { 'x-elemia-token': TOKEN } })
+    .then(r => {
+      if (r.status === 401) {
+        document.getElementById('gate-err').style.display = 'block';
+        return;
+      }
+      sessionStorage.setItem('elemia_token', TOKEN);
+      document.getElementById('token-gate').style.display = 'none';
+      initDashboard();
+    })
+    .catch(() => { document.getElementById('gate-err').style.display = 'block'; });
+}
+document.getElementById('gate-input').addEventListener('keydown', e => { if (e.key === 'Enter') authenticate(); });
+
+function logout() {
+  sessionStorage.removeItem('elemia_token');
+  location.reload();
+}
+
+function initDashboard() {
+  document.getElementById('token-gate').style.display = 'none';
+  startClock();
+  loadStatus();
+  pingAgentCard();
+}
+
+function startClock() {
+  function tick() {
+    const d = new Date();
+    document.getElementById('clock-display').textContent =
+      d.toLocaleTimeString('es-MX', { hour12: false }) + ' CST';
+  }
+  tick(); setInterval(tick, 1000);
+}
+
+function log(msg, type='log-line') {
+  const el = document.getElementById('activity-log');
+  const ts = new Date().toLocaleTimeString('es-MX', { hour12: false });
+  const line = document.createElement('div');
+  line.className = 'log-line ' + type;
+  line.textContent = `[${ts}] ${msg}`;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+
+async function api(path, opts = {}) {
+  const headers = { 'Content-Type': 'application/json', 'x-elemia-token': TOKEN };
+  const res = await fetch(BASE + path, { ...opts, headers: { ...headers, ...opts.headers } });
+  return res;
+}
+
+async function loadStatus() {
+  document.getElementById('s-server').innerHTML = '<span class="loader"></span>';
+  document.getElementById('s-memory').innerHTML = '<span class="loader"></span>';
+  document.getElementById('s-version').innerHTML = '<span class="loader"></span>';
+  document.getElementById('s-time').innerHTML = '<span class="loader"></span>';
+  try {
+    const r = await fetch(BASE + '/elemia/ping');
+    const d = await r.json();
+    document.getElementById('s-server').innerHTML = '<span class="ok">ONLINE</span>';
+    document.getElementById('s-server').className = 'stat-value ok';
+    document.getElementById('s-memory').textContent = d.memory ? 'ACTIVA' : 'OFFLINE';
+    document.getElementById('s-memory').className = 'stat-value ' + (d.memory ? 'ok' : 'err');
+    document.getElementById('s-version').textContent = d.version || '4.0.0';
+    document.getElementById('s-time').textContent = new Date(d.time).toLocaleTimeString('es-MX', { hour12: false });
+    document.getElementById('status-dot').className = 'dot online';
+    document.getElementById('status-text').textContent = 'ONLINE';
+    log('PING OK — ELEMIA v' + (d.version || '4.0') + ' activa', 'ok');
+  } catch(e) {
+    document.getElementById('s-server').textContent = 'OFFLINE';
+    document.getElementById('s-server').className = 'stat-value err';
+    document.getElementById('status-dot').className = 'dot error';
+    document.getElementById('status-text').textContent = 'ERROR';
+    log('ERROR de conexión: ' + e.message, 'err');
+  }
+}
+
+async function loadIdentity() {
+  const el = document.getElementById('identity-content');
+  el.innerHTML = '<div class="empty-state"><span class="loader"></span></div>';
+  try {
+    const r = await api('/elemia/identity');
+    const d = await r.json();
+    const id = d.identity || d;
+    el.innerHTML = `
+      <div class="id-card">
+        <div class="id-badge">IDENTIDAD VERIFICADA // ${new Date().toLocaleDateString('es-MX')}</div>
+        <div class="id-name">${id.name || 'ELEMIA'}</div>
+        <div class="id-role">${id.role || ''}</div>
+        <div class="id-row"><div class="id-key">VERSIÓN</div><div class="id-val cyan">${id.version || '-'}</div></div>
+        <div class="id-row"><div class="id-key">MISIÓN</div><div class="id-val">${id.mission || '-'}</div></div>
+        <div class="id-row"><div class="id-key">RELACIÓN</div><div class="id-val">${id.user_relation || '-'}</div></div>
+        <div class="id-row"><div class="id-key">DIRECTIVA</div><div class="id-val">${id.core_directive || '-'}</div></div>
+        <div class="id-row" style="border:none;"><div class="id-key">RECUPERACIÓN</div><div class="id-val cyan">${id.protocols?.recovery || '-'}</div></div>
+        ${id.protocols ? `<div class="protocols">
+          ${Object.entries(id.protocols).map(([k,v])=>`<div class="proto-tag">${k.toUpperCase()}: ${v}</div>`).join('')}
+        </div>` : ''}
+      </div>`;
+    log('Identidad cargada: ' + (id.name || 'ELEMIA'), 'info');
+  } catch(e) {
+    el.innerHTML = '<div class="empty-state">Error al cargar identidad</div>';
+    log('Error identidad: ' + e.message, 'err');
+  }
+}
+
+async function loadMemories() {
+  const limit = document.getElementById('mem-limit').value;
+  const el = document.getElementById('memory-list-content');
+  el.innerHTML = '<div class="empty-state"><span class="loader"></span></div>';
+  try {
+    const r = await api('/elemia/list?limit=' + limit);
+    const d = await r.json();
+    const items = d.memories || d.items || d;
+    if (!items || !items.length) { el.innerHTML = '<div class="empty-state">No hay memorias registradas</div>'; return; }
+    el.innerHTML = '<div class="memory-list">' +
+      items.map((m, i) => `<div class="memory-item">
+        <div class="memory-num">${String(i+1).padStart(2,'0')}</div>
+        <div class="memory-text">${typeof m === 'string' ? m : (m.content || m.text || JSON.stringify(m))}</div>
+      </div>`).join('') + '</div>';
+    log(`${items.length} memorias cargadas`, 'ok');
+  } catch(e) {
+    el.innerHTML = '<div class="empty-state">Error al cargar memorias</div>';
+    log('Error memorias: ' + e.message, 'err');
+  }
+}
+
+async function searchMemory() {
+  const query = document.getElementById('search-query').value.trim();
+  const limit = document.getElementById('search-limit').value;
+  const el = document.getElementById('search-results');
+  if (!query) return;
+  el.innerHTML = '<div class="empty-state"><span class="loader"></span></div>';
+  try {
+    const r = await api('/elemia/recall', { method: 'POST', body: JSON.stringify({ query, limit: parseInt(limit) }) });
+    const d = await r.json();
+    const items = d.results || d.memories || d.items || d;
+    if (!items || !items.length) { el.innerHTML = '<div class="empty-state">Sin resultados para: ' + query + '</div>'; return; }
+    el.innerHTML = '<div class="info-block" style="margin-top:1rem;">' +
+      '<div class="info-block-title">RESULTADOS (' + items.length + ')</div>' +
+      '<div class="memory-list">' +
+      items.map((m, i) => `<div class="memory-item">
+        <div class="memory-num">${String(i+1).padStart(2,'0')}</div>
+        <div class="memory-text">${typeof m === 'string' ? m : (m.content || m.text || JSON.stringify(m))}</div>
+      </div>`).join('') + '</div></div>';
+    log(`Búsqueda "${query}": ${items.length} resultados`, 'ok');
+  } catch(e) {
+    el.innerHTML = '<div class="empty-state">Error en búsqueda</div>';
+    log('Error búsqueda: ' + e.message, 'err');
+  }
+}
+
+async function saveMemory() {
+  const tag = document.getElementById('mem-tag').value.trim();
+  const content = document.getElementById('mem-content').value.trim();
+  const el = document.getElementById('remember-result');
+  if (!content) return;
+  el.innerHTML = '<div class="empty-state"><span class="loader"></span></div>';
+  try {
+    const r = await api('/elemia/remember', { method: 'POST', body: JSON.stringify({ tag: tag || 'MANUAL', content }) });
+    const d = await r.json();
+    el.innerHTML = `<div class="info-block" style="margin-top:1rem;border-top:1px solid var(--green);">
+      <div class="info-block-title" style="color:var(--green);">MEMORIA GUARDADA</div>
+      <div style="font-family:var(--mono);font-size:12px;color:var(--text2);">${JSON.stringify(d, null, 2)}</div>
+    </div>`;
+    document.getElementById('mem-content').value = '';
+    document.getElementById('mem-tag').value = '';
+    log('Memoria guardada: [' + (tag || 'MANUAL') + ']', 'ok');
+  } catch(e) {
+    el.innerHTML = '<div class="empty-state" style="color:var(--red);">Error al guardar</div>';
+    log('Error guardar memoria: ' + e.message, 'err');
+  }
+}
+
+async function saveState() {
+  const project = document.getElementById('st-project').value.trim();
+  const status = document.getElementById('st-status').value.trim();
+  const next_steps = document.getElementById('st-next').value.trim();
+  const notes = document.getElementById('st-notes').value.trim();
+  const el = document.getElementById('state-result');
+  if (!project || !status) return;
+  el.innerHTML = '<div class="empty-state"><span class="loader"></span></div>';
+  try {
+    const r = await api('/elemia/save_state', { method: 'POST', body: JSON.stringify({ project, status, next_steps, notes }) });
+    const d = await r.json();
+    el.innerHTML = `<div class="info-block" style="margin-top:1rem;border-top:1px solid var(--green);">
+      <div class="info-block-title" style="color:var(--green);">ESTADO PERSISTIDO</div>
+      <div style="font-family:var(--mono);font-size:12px;color:var(--text2);">${d.memory || JSON.stringify(d)}</div>
+    </div>`;
+    log('Estado guardado: ' + project, 'ok');
+  } catch(e) {
+    el.innerHTML = '<div class="empty-state" style="color:var(--red);">Error al guardar estado</div>';
+    log('Error estado: ' + e.message, 'err');
+  }
+}
+
+async function pingAgentCard() {
+  try {
+    const r = await fetch(BASE + '/elemia/ping');
+    const d = await r.json();
+    const el = document.getElementById('ag-elemia-status');
+    if (el) { el.textContent = '● ACTIVO'; el.style.color = 'var(--green)'; }
+  } catch(e) {}
+}
+
+function switchPanel(el) {
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  el.classList.add('active');
+  const panelId = 'panel-' + el.dataset.panel;
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById(panelId).classList.add('active');
+}
+</script>
+</body>
+</html>

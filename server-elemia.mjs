@@ -13,6 +13,8 @@ import cors from "cors";
 import { pathToFileURL } from "url";
 import { randomUUID } from "crypto";
 import crypto from "node:crypto";
+import path from "node:path";
+import { fileURLToPath } from "url";
 import {
   handleAuthorize,
   handleAuthorizationMetadata,
@@ -21,6 +23,10 @@ import {
   isAuthorizedRequest,
   sendUnauthorized
 } from "./api/oauth-core.mjs";
+
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const ELEMIA_IDENTITY = {
   name: "ELEMIA",
@@ -481,6 +487,12 @@ app.get("/.well-known/oauth-protected-resource/mcp", handleProtectedResourceMeta
 app.post("/mcp", auth, mcpPostHandler);
 app.get("/mcp", auth, mcpSessionHandler);
 app.delete("/mcp", auth, mcpSessionHandler);
+
+app.use(express.static(path.join(__dirname, "public")));
+
+app.get("/elemia/dashboard", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "dashboard.html"));
+});
 
 app.get("/", (req, res) => {
   try {
